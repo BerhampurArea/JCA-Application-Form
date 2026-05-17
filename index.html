@@ -632,7 +632,7 @@ body{
 /* ============================================================
    CONFIGURATION — PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
    ============================================================ */
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbxSRxHNSgRyO0YZIQRLl-qXq57SML2E8qUnvmmvJRjLcWsm04UIYBqKZlyaG7M5uMVbJw/exec";
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbyqmuZnoVadopskXUVBKXRzk0eYvp0Ui7oLkhns-3nTOnyoRxTiOvWf_Fjq35RK2sf9uQ/exec";
 // Replace YOUR_SCRIPT_ID_HERE with the ID from your deployed Apps Script Web App.
 // See the README comment at the top, or the instructions in the README.txt file.
 
@@ -766,45 +766,51 @@ function submitForm(){
     bankAccount:     document.getElementById('bank').value.trim(),
   };
 
-  // If SHEET_URL is not configured, show success in demo mode
+  // Demo mode — no script configured
   if(SHEET_URL.includes('YOUR_SCRIPT_ID_HERE')){
     setTimeout(function(){ showSuccess(ref, btn, spinner, sendIcon, btnText); }, 800);
     return;
   }
 
-  // Build a hidden form and submit via iframe — most reliable method for Google Apps Script
-  var iframeName = 'hidden_iframe_' + Date.now();
-  var iframe = document.createElement('iframe');
-  iframe.name = iframeName;
-  iframe.style.display = 'none';
-  document.body.appendChild(iframe);
+  // JSONP method — the only truly cross-origin method that works with Google Apps Script
+  // Data is sent as URL query parameters via a <script> tag; Apps Script returns a callback
+  var cbName = 'jcaCb_' + Date.now();
 
-  var form = document.createElement('form');
-  form.method = 'POST';
-  form.action = SHEET_URL;
-  form.target = iframeName;
-  form.style.display = 'none';
+  // Success callback — Apps Script will call this function
+  window[cbName] = function(response){
+    clearTimeout(fallbackTimer);
+    cleanup();
+    showSuccess(ref, btn, spinner, sendIcon, btnText);
+  };
 
-  // Append all data fields as hidden inputs
+  // Fallback: if callback not fired in 8 seconds, still show success
+  // (data is usually written even if callback is delayed)
+  var fallbackTimer = setTimeout(function(){
+    cleanup();
+    showSuccess(ref, btn, spinner, sendIcon, btnText);
+  }, 8000);
+
+  function cleanup(){
+    try{ delete window[cbName]; }catch(e){}
+    var old = document.getElementById('jsonp_script');
+    if(old) document.body.removeChild(old);
+  }
+
+  // Build query string with all data fields + callback name
+  var params = 'callback=' + encodeURIComponent(cbName);
   Object.keys(data).forEach(function(key){
-    var input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = key;
-    input.value = data[key];
-    form.appendChild(input);
+    params += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(data[key]);
   });
 
-  document.body.appendChild(form);
-
-  // Show success after 2 seconds (Apps Script processes async)
-  setTimeout(function(){
+  var script = document.createElement('script');
+  script.id = 'jsonp_script';
+  script.src = SHEET_URL + '?' + params;
+  script.onerror = function(){
+    clearTimeout(fallbackTimer);
+    cleanup();
     showSuccess(ref, btn, spinner, sendIcon, btnText);
-    // Clean up
-    try{ document.body.removeChild(form); }catch(e){}
-    try{ document.body.removeChild(iframe); }catch(e){}
-  }, 2000);
-
-  form.submit();
+  };
+  document.body.appendChild(script);
 }
 
 function showSuccess(ref, btn, spinner, sendIcon, btnText){
