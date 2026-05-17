@@ -632,8 +632,7 @@ body{
 /* ============================================================
    CONFIGURATION — PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
    ============================================================ */
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbxSRxHNSgRyO0YZIQRLl-qXq57SML2E8qUnvmmvJRjLcWsm04UIYBqKZlyaG7M5uMVbJw
-/exec";
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbxSRxHNSgRyO0YZIQRLl-qXq57SML2E8qUnvmmvJRjLcWsm04UIYBqKZlyaG7M5uMVbJw/exec";
 // Replace YOUR_SCRIPT_ID_HERE with the ID from your deployed Apps Script Web App.
 // See the README comment at the top, or the instructions in the README.txt file.
 
@@ -767,24 +766,45 @@ function submitForm(){
     bankAccount:     document.getElementById('bank').value.trim(),
   };
 
-  // If SHEET_URL is not configured, show success anyway (offline mode)
+  // If SHEET_URL is not configured, show success in demo mode
   if(SHEET_URL.includes('YOUR_SCRIPT_ID_HERE')){
-    setTimeout(()=>showSuccess(ref, btn, spinner, sendIcon, btnText), 800);
+    setTimeout(function(){ showSuccess(ref, btn, spinner, sendIcon, btnText); }, 800);
     return;
   }
 
-  fetch(SHEET_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(data)
-  })
-  .then(()=>showSuccess(ref, btn, spinner, sendIcon, btnText))
-  .catch(err=>{
-    // Even on network error with no-cors, show success (Apps Script may still receive it)
-    console.warn('Fetch note:', err);
-    showSuccess(ref, btn, spinner, sendIcon, btnText);
+  // Build a hidden form and submit via iframe — most reliable method for Google Apps Script
+  var iframeName = 'hidden_iframe_' + Date.now();
+  var iframe = document.createElement('iframe');
+  iframe.name = iframeName;
+  iframe.style.display = 'none';
+  document.body.appendChild(iframe);
+
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = SHEET_URL;
+  form.target = iframeName;
+  form.style.display = 'none';
+
+  // Append all data fields as hidden inputs
+  Object.keys(data).forEach(function(key){
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = data[key];
+    form.appendChild(input);
   });
+
+  document.body.appendChild(form);
+
+  // Show success after 2 seconds (Apps Script processes async)
+  setTimeout(function(){
+    showSuccess(ref, btn, spinner, sendIcon, btnText);
+    // Clean up
+    try{ document.body.removeChild(form); }catch(e){}
+    try{ document.body.removeChild(iframe); }catch(e){}
+  }, 2000);
+
+  form.submit();
 }
 
 function showSuccess(ref, btn, spinner, sendIcon, btnText){
@@ -822,8 +842,7 @@ function resetForm(){
 
 --- COPY FROM HERE ---
 
-const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1DTmbeeeAjzdOoYubKyhEVJOZYcgOoY1HNAo8klL8BHo/edit?gid=0#gid=0
-';
+const SPREADSHEET_ID = 'YOUR_GOOGLE_SHEET_ID_HERE';
 const SHEET_NAME = 'JCA Applications';
 
 function doPost(e) {
